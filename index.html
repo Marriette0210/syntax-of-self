@@ -1112,7 +1112,36 @@ body[data-ending-final="1"] .passage {
   image-rendering: auto;
 }
 .end-close-btn:hover{ opacity: .45; }
-</style><script role="script" id="twine-user-script" type="text/twine-javascript">/* ========== 计算 1920×1080 缩放，保持居中 ========== */
+
+/* 小小的音乐按钮（右上角） */
+#bgm-btn{
+  position: fixed; right: 14px; top: 14px; z-index: 2147483000;
+  width: 36px; height: 36px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.35);
+  background: rgba(0,0,0,.25);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  display: grid; place-items: center;
+  transition: transform .15s ease, background .2s ease, border-color .2s ease, opacity .2s;
+  color: #eee;
+}
+#bgm-btn:hover{ transform: scale(1.06); background: rgba(0,0,0,.35); border-color: rgba(255,255,255,.5); }
+
+/* 用纯 CSS 画个图标：播放/暂停/静音三态 */
+#bgm-btn::before{
+  content: '';
+  width: 0; height: 0;
+  border-style: solid;
+  border-width: 8px 0 8px 13px;          /* ▶︎ */
+  border-color: transparent transparent transparent currentColor;
+}
+#bgm-btn[data-state="playing"]::before{
+  content: ''; width: 14px; height: 14px; /* ❚❚ */
+  border: none; box-shadow: inset 0 0 0 0 currentColor, 6px 0 0 0 currentColor;
+}
+#bgm-btn[data-state="muted"]::before{
+  content: '×'; font: 700 16px/1 ui-sans-serif, system-ui; transform: translateY(-1px);
+}</style><script role="script" id="twine-user-script" type="text/twine-javascript">/* ========== 计算 1920×1080 缩放，保持居中 ========== */
 (function fit(){
   const W=1920, H=1080;
   function apply(){
@@ -2569,6 +2598,108 @@ window.typeEND = function(el, text, speed=22){
       }
     });
   }
+})();
+
+/* ===== Global BGM controller (SugarCube) ===== */
+(function () {
+  const LS_KEY = 'bgm_prefs_v1';
+
+  function loadPrefs() {
+    try { return Object.assign({ muted:false, volume:0.35 }, JSON.parse(localStorage.getItem(LS_KEY)||'{}')); }
+    catch { return { muted:false, volume:0.35 }; }
+  }
+  function savePrefs(p) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(p)); } catch(_) {}
+  }
+
+  const prefs = loadPrefs();
+  let audio = null;
+
+  function ensureAudio() {
+    if (audio) return audio;
+    audio = document.createElement('audio');
+    audio.id = 'bgm-audio';
+    audio.loop = true;
+    audio.preload = 'auto';
+    audio.volume = Math.max(0, Math.min(1, prefs.volume));
+    audio.muted = !!prefs.muted;
+
+    // 多源兜底
+    const s1 = document.createElement('source'); s1.src = 'assets/audio/bgm.mp3'; s1.type = 'audio/mpeg';
+    const s2 = document.createElement('source'); s2.src = 'assets/audio/bgm.ogg'; s2.type = 'audio/ogg';
+    audio.append(s1, s2);
+
+    document.body.appendChild(audio);
+    return audio;
+  }
+
+  // 用户手势解锁播放（浏览器自动播放策略）
+  let unlocked = false;
+  function unlockAudioOnce() {
+    if (unlocked) return;
+    unlocked = true;
+    const a = ensureAudio();
+    a.play().catch(()=>{/* 某些浏览器需要第二次交互再试；UI按钮也会再次调用 */});
+  }
+  document.addEventListener('click', unlockAudioOnce, { once:true, capture:true });
+  document.addEventListener('keydown', unlockAudioOnce, { once:true, capture:true });
+  document.addEventListener('touchstart', unlockAudioOnce, { once:true, capture:true });
+
+  // 可见性变化：切到后台自动降噪（可按需改为 pause）
+  document.addEventListener('visibilitychange', () => {
+    const a = ensureAudio();
+    if (document.hidden) a.volume = Math.min(a.volume, 0.12);
+    else a.volume = Math.max(prefs.volume, 0.05);
+  });
+
+  // 暴露全局控制（给 Twine 用）
+  window.BGM = {
+    play()  { const a = ensureAudio(); return a.play().catch(()=>{}); },
+    pause() { ensureAudio().pause(); },
+    toggle(){
+      const a = ensureAudio();
+      if (a.paused) a.play().catch(()=>{}); else a.pause();
+    },
+    mute(v=true){ const a = ensureAudio(); a.muted = !!v; prefs.muted = !!v; savePrefs(prefs); updateBtn(); },
+    unmute(){ this.mute(false); },
+    setVolume(v){ const a = ensureAudio(); prefs.volume = Math.max(0, Math.min(1, v)); a.volume = prefs.volume; savePrefs(prefs); updateBtn(); },
+    isMuted(){ return !!ensureAudio().muted; },
+    isPlaying(){ const a = ensureAudio(); return !a.paused; }
+  };
+
+  /* —— 小按钮 UI —— */
+  function makeBtn() {
+    if (document.getElementById('bgm-btn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'bgm-btn';
+    btn.type = 'button';
+    btn.title = 'Music: toggle';
+    btn.addEventListener('click', (e) => {
+      e.preventDefault(); unlockAudioOnce();
+      if (window.BGM.isMuted()) window.BGM.unmute();
+      else if (window.BGM.isPlaying()) window.BGM.mute(true);
+      else window.BGM.play();
+      updateBtn();
+    });
+    document.body.appendChild(btn);
+    updateBtn();
+  }
+
+  function updateBtn(){
+    const btn = document.getElementById('bgm-btn'); if (!btn) return;
+    const a = ensureAudio();
+    btn.dataset.state = a.muted ? 'muted' : (a.paused ? 'paused' : 'playing');
+  }
+
+  /* SugarCube hooks：每个 passage 显示都确保控件存在 */
+  $(document).on(':passagedisplay', function(){
+    ensureAudio();
+    makeBtn();
+    updateBtn();
+  });
+
+  /* 初始化：预建 audio，但不强行播放，等手势解锁 */
+  ensureAudio();
 })();</script><tw-passagedata pid="1" name="StoryInit" tags="" position="425,225" size="100,100"></tw-passagedata><tw-passagedata pid="2" name="Start" tags="" position="425,350" size="100,100">&lt;div id=&quot;frame&quot;&gt;
   &lt;div id=&quot;greeneye&quot;&gt;&lt;/div&gt;
   &lt;div id=&quot;r2u&quot;&gt;&lt;/div&gt;
