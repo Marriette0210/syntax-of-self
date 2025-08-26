@@ -2591,14 +2591,37 @@ window.typeEND = function(el, text, speed=22){
           document.body.appendChild(btn);
           btn.addEventListener('click', (e) => {
             e.preventDefault(); e.stopPropagation();
-            try { window.open('', '_self'); window.close(); }
-            catch(_) { /* 浏览器不允许关闭则跳空白页 */ location.href = 'about:blank'; }
-          });
-        }
-      }
-    });
-  }
-})();
+            e.stopPropagation();
+            const fallbackUrl = 'about:blank'; // 需要的话改成你的首页，比如 '/index.html'
+
+            if (history.length > 1) {
+              history.back();
+
+      // 兜底：某些场景 back 不会发生导航（比如首个历史或锚点）
+              setTimeout(() => {
+                if (document.visibilityState === 'visible') {
+                  location.href = fallbackUrl;
+                }
+              }, 600);
+            } else {
+              location.href = fallbackUrl;
+    }
+  });
+}
+
+/* 顶层关闭按钮（挂在 body，保证可点） */
+        let btn = document.querySelector('.end-close-btn');
+        if (!btn) {
+          btn = document.createElement('img');
+          btn.className = 'end-close-btn';
+          btn.src = closePng;
+          btn.alt = 'Close';
+          document.body.appendChild(btn);
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+
+        
 
 /* ===== Global BGM controller (SugarCube) ===== */
 (function () {
