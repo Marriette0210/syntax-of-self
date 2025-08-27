@@ -2426,14 +2426,15 @@ window.runAuditTyping = function () {
 })();
 
 /* ===== 简洁打字机（支持 \n）===== */
-window.typeEND = function(el, text, speed=22){
-  return new Promise(res=>{
-    if(!el){ res(); return; }
+// 顶部/底部打字机
+window.typeEND = function (el, text, speed = 22) {
+  return new Promise(res => {
+    if (!el) { res(); return; }
     const s = (text ?? "").toString();
     el.innerHTML = "";
     let i = 0;
-    (function tick(){
-      if(i < s.length){
+    (function tick() {
+      if (i < s.length) {
         const ch = s.charAt(i++);
         el.innerHTML += (ch === "\n") ? "<br>" : ch;
         setTimeout(tick, speed);
@@ -2442,9 +2443,8 @@ window.typeEND = function(el, text, speed=22){
   });
 };
 
-/* ===== END overlay (video + PNG + two typers, centered close button) ===== */
+/* ===== END overlay（video + PNG + top + bottom；无 close 按钮） ===== */
 (function () {
-  /* 注入样式（仅一次） */
   function ensureStyles () {
     if (document.getElementById('end-style')) return;
     const css = `
@@ -2455,34 +2455,21 @@ window.typeEND = function(el, text, speed=22){
   width:100vw;height:auto;object-fit:cover;z-index:0;pointer-events:none;
 }
 @media (max-aspect-ratio:16/9){#end-root .end-video{width:auto;height:100vh}}
-/* 覆盖 PNG（<img> + CSS 背景变量 双保险） */
+/* 覆盖 PNG */
 #end-root .end-overlay{
   position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
   z-index:1;pointer-events:none;
   background: var(--end-overlay-url, none) center/cover no-repeat;
 }
-/* 顶/底两段打字文案 */
+/* 顶/底文案 */
 #end-root .end-top,#end-root .end-bottom{
   position:absolute;left:50%;transform:translateX(-50%);
   width:min(86vw,960px);text-align:center;user-select:none;
   color:rgb(137,137,137);
   letter-spacing:.04em;line-height:1.45;z-index:2;pointer-events:none;
 }
-#end-root .end-top{top:14vh;font-family:"DigiGraphics",ui-monospace,monospace;font-size:clamp(16px,2.1vw,26px)}
-#end-root .end-bottom{bottom:14vh;font-family:"Kingthings Trypewriter",ui-monospace,monospace;font-size:clamp(14px,1.8vw,22px)}
-
-/* —— 顶层关闭按钮（放在 body，永远可点） —— */
-:root{
-  --end-close-w: 200px;   /* 改这里调大小 */
-  --end-close-bottom: 15%;/* 改这里调距底部位置 */
-}
-.end-close-btn{
-  position:fixed;left:50%;bottom:var(--end-close-bottom);transform:translateX(-50%);
-  width:var(--end-close-w);height:auto;
-  z-index:2147483650;pointer-events:auto;cursor:pointer;
-  transition:opacity .2s ease, transform .2s ease;
-  -webkit-user-drag:none; user-select:none;
-}
+#end-root .end-top{top:15vh;font-family:"DigiGraphics",ui-monospace,monospace;font-size:clamp(16px,2.1vw,26px)}
+#end-root .end-bottom{bottom:18vh;font-family:"Kingthings Trypewriter",ui-monospace,monospace;font-size:clamp(14px,1.8vw,22px)}
 `;
     const tag = document.createElement('style');
     tag.id = 'end-style';
@@ -2490,23 +2477,19 @@ window.typeEND = function(el, text, speed=22){
     document.head.appendChild(tag);
   }
 
-  /* 清理 */
+  // 清理
   function removeEndRoot () {
     const el = document.getElementById('end-root');
     if (el && el.parentNode) el.parentNode.removeChild(el);
   }
-  function removeCloseBtn () {
-    const btn = document.querySelector('.end-close-btn');
-    if (btn && btn.parentNode) btn.parentNode.removeChild(btn);
-  }
   try {
     $(document).on(':passagestart', ev => {
       const t = String(ev.passage?.title || '').toLowerCase();
-      if (!/^(end|endn|endr|endf|hidden)$/.test(t)) { removeEndRoot(); removeCloseBtn(); }
+      if (!/^(end|endn|endr|endf|hidden)$/.test(t)) { removeEndRoot(); }
     });
   } catch (_) {}
 
-  /* 简易打字机 */
+  // 简易打字机
   async function type (el, s, spd = 22) {
     if (!el) return;
     el.innerHTML = '';
@@ -2518,7 +2501,7 @@ window.typeEND = function(el, text, speed=22){
     }
   }
 
-  /* 宏：<<endsimple2 video overlay topText bottomText [closePng]>> */
+  /* 宏：<<endsimple2 video overlay topText bottomText>> */
   if (typeof Macro !== 'undefined' && (!Macro.get || !Macro.get('endsimple2'))) {
     Macro.add('endsimple2', {
       handler: function () {
@@ -2528,7 +2511,6 @@ window.typeEND = function(el, text, speed=22){
         const overlayIn  = this.args[1] || '';
         const topText    = this.args[2] || '';
         const botText    = this.args[3] || '';
-        const closePng   = this.args[4] || 'assets/endings/close.png';
 
         // 根节点
         const root = document.createElement('div'); 
@@ -2550,7 +2532,7 @@ window.typeEND = function(el, text, speed=22){
         root.append(vid, ov, top, bot);
         document.body.appendChild(root);
 
-        // 依次尝试若干 PNG 路径
+        // 尝试加载 overlay PNG
         const base = (window.location.pathname || '').replace(/\/[^/]*$/, '/');
         const join = (a, b) => a.replace(/\/+$/, '') + '/' + b.replace(/^\/+/, '');
         const candidates = [
@@ -2580,48 +2562,10 @@ window.typeEND = function(el, text, speed=22){
           if (topText) await type(top, topText, 20);
           if (botText) await type(bot, botText, 20);
         })();
-
-        /* 顶层关闭按钮（挂在 body，保证可点） */
-        let btn = document.querySelector('.end-close-btn');
-        if (!btn) {
-          btn = document.createElement('img');
-          btn.className = 'end-close-btn';
-          btn.src = closePng;
-          btn.alt = 'Close';
-          document.body.appendChild(btn);
-          btn.addEventListener('click', (e) => {
-            e.preventDefault(); e.stopPropagation();
-            e.stopPropagation();
-            const fallbackUrl = 'about:blank'; // 需要的话改成你的首页，比如 '/index.html'
-
-            if (history.length > 1) {
-              history.back();
-
-      // 兜底：某些场景 back 不会发生导航（比如首个历史或锚点）
-              setTimeout(() => {
-                if (document.visibilityState === 'visible') {
-                  location.href = fallbackUrl;
-                }
-              }, 600);
-            } else {
-              location.href = fallbackUrl;
-    }
-  });
-}
-
-/* 顶层关闭按钮（挂在 body，保证可点） */
-        let btn = document.querySelector('.end-close-btn');
-        if (!btn) {
-          btn = document.createElement('img');
-          btn.className = 'end-close-btn';
-          btn.src = closePng;
-          btn.alt = 'Close';
-          document.body.appendChild(btn);
-          btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            
-
-        
+      }
+    });
+  }
+})(); 
 
 /* ===== Global BGM controller (SugarCube) ===== */
 (function () {
